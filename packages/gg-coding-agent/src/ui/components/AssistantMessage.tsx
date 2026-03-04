@@ -22,9 +22,9 @@ export function AssistantMessage({ text, thinking, showThinking = true }: Assist
         </Box>
       )}
       {text && (
-        <Box>
+        <Box flexShrink={1}>
           <Text color={theme.primary}>{"⏺ "}</Text>
-          <Box flexDirection="column" flexShrink={1}>
+          <Box flexDirection="column" flexGrow={1} flexShrink={1} flexBasis={0}>
             <Markdown>{text.trimStart()}</Markdown>
           </Box>
         </Box>

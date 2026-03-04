@@ -1,71 +1,20 @@
 import React from "react";
 import { Text, Box } from "ink";
 import { useTheme } from "../theme/theme.js";
-import { Spinner } from "./Spinner.js";
 import { Markdown } from "./Markdown.js";
-import { ThinkingIndicator } from "./ThinkingIndicator.js";
-import type { ActiveToolCall } from "../hooks/useAgentLoop.js";
-
-const TOOL_NAMES: Record<string, string> = {
-  bash: "Bash",
-  read: "Read",
-  write: "Write",
-  edit: "Update",
-  grep: "Search",
-  find: "Find",
-  ls: "List",
-  subagent: "Agent",
-};
-
-function formatActiveToolLabel(name: string, args: Record<string, unknown>): string {
-  const display = TOOL_NAMES[name] ?? name;
-  switch (name) {
-    case "bash": {
-      const cmd = String(args.command ?? "");
-      const first = cmd.split("\n")[0];
-      const trunc = first.length > 60 ? first.slice(0, 57) + "…" : first;
-      return `${display}(${trunc}${cmd.includes("\n") ? " …" : ""})`;
-    }
-    case "read": {
-      const fp = String(args.file_path ?? "");
-      return `${display}(${fp.split("/").pop() ?? fp})`;
-    }
-    case "edit":
-    case "write":
-      return `${display}(${String(args.file_path ?? "")})`;
-    case "grep":
-      return `${display}(${String(args.pattern ?? "")})`;
-    case "find":
-      return `${display}(${String(args.pattern ?? "")})`;
-    case "ls":
-      return `${display}(${String(args.path ?? ".")})`;
-    case "subagent": {
-      const task = String(args.task ?? "");
-      const trunc = task.length > 50 ? task.slice(0, 47) + "…" : task;
-      const agentName = args.agent ? `${args.agent}: ` : "";
-      return `${display}(${agentName}${trunc})`;
-    }
-    default:
-      return display;
-  }
-}
 
 interface StreamingAreaProps {
   isRunning: boolean;
   streamingText: string;
   streamingThinking: string;
-  activeToolCalls: ActiveToolCall[];
   showThinking?: boolean;
-  userMessage?: string;
 }
 
 export function StreamingArea({
   isRunning,
   streamingText,
   streamingThinking,
-  activeToolCalls,
   showThinking = true,
-  userMessage = "",
 }: StreamingAreaProps) {
   const theme = useTheme();
 
@@ -73,10 +22,6 @@ export function StreamingArea({
 
   return (
     <Box flexDirection="column" marginTop={1}>
-      {isRunning && !streamingText && activeToolCalls.length === 0 && (
-        <ThinkingIndicator userMessage={userMessage} />
-      )}
-
       {showThinking && streamingThinking && (
         <Box marginBottom={1}>
           <Text color={theme.textDim} italic>
@@ -86,30 +31,13 @@ export function StreamingArea({
       )}
 
       {streamingText && (
-        <Box>
+        <Box flexShrink={1}>
           <Text color={theme.primary}>{"⏺ "}</Text>
-          <Box flexDirection="column" flexShrink={1}>
+          <Box flexDirection="column" flexGrow={1} flexShrink={1} flexBasis={0}>
             <Markdown>{streamingText}</Markdown>
           </Box>
         </Box>
       )}
-
-      {(() => {
-        const otherCalls = activeToolCalls.filter((tc) => tc.name !== "subagent");
-        if (otherCalls.length === 0) return null;
-        return (
-          <Box flexDirection="column" marginTop={1}>
-            {otherCalls.map((tc) => {
-              const label = formatActiveToolLabel(tc.name, tc.args);
-              return (
-                <Box key={tc.toolCallId}>
-                  <Spinner label={label} />
-                </Box>
-              );
-            })}
-          </Box>
-        );
-      })()}
     </Box>
   );
 }

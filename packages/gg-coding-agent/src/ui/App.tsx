@@ -10,6 +10,7 @@ import { ToolExecution } from "./components/ToolExecution.js";
 import { SubAgentPanel, type SubAgentInfo } from "./components/SubAgentPanel.js";
 import type { SubAgentUpdate, SubAgentDetails } from "../tools/subagent.js";
 import { StreamingArea } from "./components/StreamingArea.js";
+import { ActivityIndicator } from "./components/ActivityIndicator.js";
 import { InputArea } from "./components/InputArea.js";
 import { Footer } from "./components/Footer.js";
 import { Banner } from "./components/Banner.js";
@@ -173,6 +174,9 @@ export function App(props: AppProps) {
   const [liveItems, setLiveItems] = useState<CompletedItem[]>(initialLiveItems);
   const [overlay, setOverlay] = useState<"model" | null>(null);
   const [lastUserMessage, setLastUserMessage] = useState("");
+  const [doneStatus, setDoneStatus] = useState<{ durationMs: number; toolsUsed: string[] } | null>(
+    null,
+  );
   const [gitBranch, setGitBranch] = useState<string | null>(null);
   const [currentModel, setCurrentModel] = useState(props.model);
   const [currentProvider, setCurrentProvider] = useState(props.provider);
@@ -354,7 +358,7 @@ export function App(props: AppProps) {
         [],
       ),
       onDone: useCallback((durationMs: number, toolsUsed: string[]) => {
-        setLiveItems((prev) => [...prev, { kind: "duration", durationMs, toolsUsed, id: getId() }]);
+        setDoneStatus({ durationMs, toolsUsed });
       }, []),
       onAborted: useCallback(() => {
         setLiveItems((prev) => {
@@ -407,6 +411,7 @@ export function App(props: AppProps) {
       // Add user message to live area
       const userItem: UserItem = { kind: "user", text: input, id: getId() };
       setLastUserMessage(input);
+      setDoneStatus(null);
       setLiveItems([userItem]);
 
       // Run agent
@@ -521,26 +526,43 @@ export function App(props: AppProps) {
       {/* History — scrolled up, managed by Ink Static */}
       <Static items={history}>{(item) => renderItem(item)}</Static>
 
-      {/* Content area — fills remaining space */}
-      <Box flexDirection="column" flexGrow={1}>
+      {/* Content area — paddingRight prevents Yoga off-by-one blank lines
+          when text wraps at the exact terminal edge */}
+      <Box flexDirection="column" flexGrow={1} paddingRight={1}>
         {/* Live items — current/last turn, stays visible */}
         {liveItems.map((item) => renderItem(item))}
 
-        {/* Streaming area */}
+        {/* Streaming area — thinking text + response text */}
         <StreamingArea
           isRunning={agentLoop.isRunning}
           streamingText={agentLoop.streamingText}
           streamingThinking={agentLoop.streamingThinking}
-          activeToolCalls={agentLoop.activeToolCalls}
           showThinking={props.showThinking}
-          userMessage={lastUserMessage}
-          activityPhase={agentLoop.activityPhase}
-          elapsedMs={agentLoop.elapsedMs}
-          thinkingMs={agentLoop.thinkingMs}
-          isThinking={agentLoop.isThinking}
-          streamedTokenEstimate={agentLoop.streamedTokenEstimate}
         />
       </Box>
+
+      {/* Pinned status line — activity indicator while running, duration summary when done */}
+      {agentLoop.isRunning && agentLoop.activityPhase !== "idle" ? (
+        <Box marginTop={1}>
+          <ActivityIndicator
+            phase={agentLoop.activityPhase}
+            elapsedMs={agentLoop.elapsedMs}
+            thinkingMs={agentLoop.thinkingMs}
+            isThinking={agentLoop.isThinking}
+            tokenEstimate={agentLoop.streamedTokenEstimate}
+            userMessage={lastUserMessage}
+          />
+        </Box>
+      ) : (
+        doneStatus && (
+          <Box marginTop={1}>
+            <Text color={theme.textDim}>
+              {"✻ "}
+              {pickDurationVerb(doneStatus.toolsUsed)} {formatDuration(doneStatus.durationMs)}
+            </Text>
+          </Box>
+        )
+      )}
 
       {/* Input + Footer/ModelSelector pinned at bottom */}
       <InputArea onSubmit={handleSubmit} onAbort={handleAbort} disabled={agentLoop.isRunning} />
