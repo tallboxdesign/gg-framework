@@ -2,7 +2,7 @@ import React from "react";
 import { render } from "ink";
 import type { Message, Provider, ThinkingLevel } from "@kenkaiiii/gg-ai";
 import type { AgentTool } from "@kenkaiiii/gg-agent";
-import { App } from "./App.js";
+import { App, type CompletedItem } from "./App.js";
 import { ThemeContext, loadTheme } from "./theme/theme.js";
 
 export interface RenderAppConfig {
@@ -23,6 +23,9 @@ export interface RenderAppConfig {
   onSlashCommand?: (input: string) => Promise<string | null>;
   loggedInProviders?: Provider[];
   credentialsByProvider?: Record<string, { accessToken: string; accountId?: string }>;
+  initialHistory?: CompletedItem[];
+  sessionsDir?: string;
+  sessionPath?: string;
 }
 
 export async function renderApp(config: RenderAppConfig): Promise<void> {
@@ -49,6 +52,9 @@ export async function renderApp(config: RenderAppConfig): Promise<void> {
         onSlashCommand: config.onSlashCommand,
         loggedInProviders: config.loggedInProviders,
         credentialsByProvider: config.credentialsByProvider,
+        initialHistory: config.initialHistory,
+        sessionsDir: config.sessionsDir,
+        sessionPath: config.sessionPath,
       }),
     ),
   );

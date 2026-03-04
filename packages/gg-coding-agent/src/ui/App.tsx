@@ -1,5 +1,6 @@
 import React, { useState, useRef, useCallback, useEffect } from "react";
 import { Box, Text, Static, useStdout } from "ink";
+import crypto from "node:crypto";
 import type { Message, Provider, ThinkingLevel } from "@kenkaiiii/gg-ai";
 import type { AgentTool } from "@kenkaiiii/gg-agent";
 import { useAgentLoop } from "./hooks/useAgentLoop.js";
@@ -16,6 +17,7 @@ import { ModelSelector } from "./components/ModelSelector.js";
 import { useTheme } from "./theme/theme.js";
 import { getGitBranch } from "../utils/git.js";
 import { getModel } from "../core/model-registry.js";
+import { SessionManager, type MessageEntry } from "../core/session-manager.js";
 
 // ── Completed Item Types ───────────────────────────────────
 
@@ -81,7 +83,7 @@ interface SubAgentGroupItem {
   id: string;
 }
 
-type CompletedItem =
+export type CompletedItem =
   | UserItem
   | AssistantItem
   | ToolStartItem
@@ -153,6 +155,9 @@ export interface AppProps {
   onSlashCommand?: (input: string) => Promise<string | null>;
   loggedInProviders?: Provider[];
   credentialsByProvider?: Record<string, { accessToken: string; accountId?: string }>;
+  initialHistory?: CompletedItem[];
+  sessionsDir?: string;
+  sessionPath?: string;
 }
 
 // ── App Component ──────────────────────────────────────────
@@ -162,7 +167,10 @@ export function App(props: AppProps) {
   // Items scrolled into Static (history)
   const [history, setHistory] = useState<CompletedItem[]>([]);
   // Items from the current/last turn — rendered in the live area so they stay visible
-  const [liveItems, setLiveItems] = useState<CompletedItem[]>([{ kind: "banner", id: "banner" }]);
+  const initialLiveItems: CompletedItem[] = props.initialHistory
+    ? [{ kind: "banner", id: "banner" }, ...props.initialHistory]
+    : [{ kind: "banner", id: "banner" }];
+  const [liveItems, setLiveItems] = useState<CompletedItem[]>(initialLiveItems);
   const [overlay, setOverlay] = useState<"model" | null>(null);
   const [lastUserMessage, setLastUserMessage] = useState("");
   const [gitBranch, setGitBranch] = useState<string | null>(null);
@@ -170,6 +178,10 @@ export function App(props: AppProps) {
   const [currentProvider, setCurrentProvider] = useState(props.provider);
   const messagesRef = useRef<Message[]>(props.messages);
   const nextIdRef = useRef(0);
+  const sessionManagerRef = useRef(
+    props.sessionsDir ? new SessionManager(props.sessionsDir) : null,
+  );
+  const persistedIndexRef = useRef(messagesRef.current.length);
 
   const getId = () => String(nextIdRef.current++);
 
@@ -182,6 +194,26 @@ export function App(props: AppProps) {
   useEffect(() => {
     getGitBranch(props.cwd).then(setGitBranch);
   }, [props.cwd]);
+
+  const persistNewMessages = useCallback(async () => {
+    const sm = sessionManagerRef.current;
+    const sp = props.sessionPath;
+    if (!sm || !sp) return;
+    const allMsgs = messagesRef.current;
+    for (let i = persistedIndexRef.current; i < allMsgs.length; i++) {
+      const msg = allMsgs[i];
+      if (msg.role === "system") continue;
+      const entry: MessageEntry = {
+        type: "message",
+        id: crypto.randomUUID(),
+        parentId: null,
+        timestamp: new Date().toISOString(),
+        message: msg,
+      };
+      await sm.appendEntry(sp, entry);
+    }
+    persistedIndexRef.current = allMsgs.length;
+  }, [props.sessionPath]);
 
   const agentLoop = useAgentLoop(
     messagesRef,
@@ -196,6 +228,9 @@ export function App(props: AppProps) {
       accountId: activeAccountId,
     },
     {
+      onComplete: useCallback(() => {
+        persistNewMessages();
+      }, [persistNewMessages]),
       onTurnText: useCallback((text: string, thinking: string) => {
         setLiveItems((prev) => [...prev, { kind: "assistant", text, thinking, id: getId() }]);
       }, []),
@@ -499,6 +534,11 @@ export function App(props: AppProps) {
           activeToolCalls={agentLoop.activeToolCalls}
           showThinking={props.showThinking}
           userMessage={lastUserMessage}
+          activityPhase={agentLoop.activityPhase}
+          elapsedMs={agentLoop.elapsedMs}
+          thinkingMs={agentLoop.thinkingMs}
+          isThinking={agentLoop.isThinking}
+          streamedTokenEstimate={agentLoop.streamedTokenEstimate}
         />
       </Box>
 
@@ -515,7 +555,7 @@ export function App(props: AppProps) {
       ) : (
         <Footer
           model={currentModel}
-          tokensIn={agentLoop.totalTokens.input}
+          tokensIn={agentLoop.contextUsed}
           cwd={props.cwd}
           gitBranch={gitBranch}
         />

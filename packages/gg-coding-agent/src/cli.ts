@@ -6,13 +6,18 @@ import readline from "node:readline/promises";
 import { exec } from "node:child_process";
 import { createRequire } from "node:module";
 import { runPrintMode } from "./modes/print-mode.js";
+import { runJsonMode } from "./modes/json-mode.js";
 import { renderApp } from "./ui/render.js";
+import { renderLoginSelector } from "./ui/login.js";
+import type { CompletedItem } from "./ui/App.js";
 import { formatUserError } from "./utils/error-handler.js";
-import type { Provider, ThinkingLevel } from "@kenkaiiii/gg-ai";
+import type { Message, Provider, ThinkingLevel } from "@kenkaiiii/gg-ai";
 import { AuthStorage } from "./core/auth-storage.js";
+import { SessionManager } from "./core/session-manager.js";
 import { ensureAppDirs } from "./config.js";
 import { buildSystemPrompt } from "./system-prompt.js";
 import { createTools } from "./tools/index.js";
+import { discoverAgents } from "./core/agents.js";
 import { loginAnthropic } from "./core/oauth/anthropic.js";
 import { loginOpenAI } from "./core/oauth/openai.js";
 import type { OAuthLoginCallbacks } from "./core/oauth/types.js";
@@ -27,6 +32,7 @@ Usage: ggcoder [command] [options] [message...]
 Commands:
   login                     Log in to a provider via OAuth
   logout                    Log out (clear stored credentials)
+  continue                  Resume the most recent session for this directory
 
 Options:
   -p, --provider <name>     LLM provider (anthropic, openai) [default: anthropic]
@@ -34,9 +40,10 @@ Options:
       --base-url <url>      Custom API base URL
       --system-prompt <text> Override system prompt
       --thinking <level>    Thinking level (low, medium, high)
-  -c, --continue            Resume the most recent session for this directory
+      --max-turns <n>       Maximum agent loop turns [default: 40]
   -s, --session <path>      Resume a specific session file
       --print               Print mode: one-shot, output to stdout, then exit
+      --json                JSON mode: one-shot, output NDJSON events to stdout
   -h, --help                Show this help message
 
 Print mode:
@@ -68,6 +75,11 @@ function main(): void {
     return;
   }
 
+  if (subcommand === "continue") {
+    // Remove "continue" so parseArgs handles remaining flags
+    process.argv.splice(2, 1);
+  }
+
   const { values, positionals } = parseArgs({
     options: {
       provider: { type: "string", short: "p" },
@@ -75,9 +87,10 @@ function main(): void {
       "base-url": { type: "string" },
       "system-prompt": { type: "string" },
       thinking: { type: "string" },
-      continue: { type: "boolean", short: "c" },
+      "max-turns": { type: "string" },
       session: { type: "string", short: "s" },
       print: { type: "boolean" },
+      json: { type: "boolean" },
       help: { type: "boolean", short: "h" },
     },
     allowPositionals: true,
@@ -93,6 +106,7 @@ function main(): void {
   const model = values.model ?? (provider === "openai" ? "gpt-4.1" : "claude-opus-4-6");
 
   const thinkingLevel = values.thinking as ThinkingLevel | undefined;
+  const maxTurns = values["max-turns"] ? parseInt(values["max-turns"], 10) : undefined;
 
   // Print mode
   if (values.print) {
@@ -117,8 +131,33 @@ function main(): void {
     return;
   }
 
+  // JSON mode
+  if (values.json) {
+    const message = positionals.join(" ").trim() || readStdinSync();
+    if (!message) {
+      console.error("Error: --json requires a message (positional args or stdin)");
+      process.exit(1);
+    }
+
+    runJsonMode({
+      message,
+      provider,
+      model,
+      baseUrl: values["base-url"],
+      systemPrompt: values["system-prompt"],
+      cwd: process.cwd(),
+      thinkingLevel,
+      maxTurns,
+    }).catch((err) => {
+      process.stderr.write(formatUserError(err) + "\n");
+      process.exit(1);
+    });
+    return;
+  }
+
   // Interactive mode (Ink TUI)
   const cwd = process.cwd();
+  const continueRecent = subcommand === "continue";
 
   runInkTUI({
     provider,
@@ -127,6 +166,8 @@ function main(): void {
     cwd,
     thinkingLevel,
     systemPrompt: values["system-prompt"],
+    continueRecent,
+    sessionPath: values.session,
   }).catch((err) => {
     process.stderr.write(formatUserError(err) + "\n");
     process.exit(1);
@@ -142,6 +183,8 @@ async function runInkTUI(opts: {
   cwd: string;
   thinkingLevel?: ThinkingLevel;
   systemPrompt?: string;
+  continueRecent?: boolean;
+  sessionPath?: string;
 }): Promise<void> {
   const { provider, model, cwd } = opts;
 
@@ -172,12 +215,53 @@ async function runInkTUI(opts: {
     }
   }
 
-  // Build system prompt & tools
+  // Discover agents and build tools
+  const agents = await discoverAgents({
+    globalAgentsDir: paths.agentsDir,
+    projectDir: cwd,
+  });
+
+  // Build system prompt & tools (with sub-agent support)
   const systemPrompt = opts.systemPrompt ?? (await buildSystemPrompt(cwd));
-  const tools = createTools(cwd);
+  const tools = createTools(cwd, { agents, provider, model });
 
   // Seed messages with system prompt
-  const messages = [{ role: "system" as const, content: systemPrompt }];
+  const messages: Message[] = [{ role: "system" as const, content: systemPrompt }];
+
+  // Session management — create or reuse session file
+  const sessionManager = new SessionManager(paths.sessionsDir);
+  let sessionPath: string | undefined;
+  let initialHistory: CompletedItem[] | undefined;
+
+  if (opts.continueRecent || opts.sessionPath) {
+    const existingPath = opts.sessionPath ?? (await sessionManager.getMostRecent(cwd));
+
+    if (existingPath) {
+      try {
+        const loaded = await sessionManager.load(existingPath);
+        const loadedMessages = sessionManager.getMessages(loaded.entries);
+
+        if (loadedMessages.length > 0) {
+          messages.push(...loadedMessages);
+          sessionPath = existingPath; // reuse existing session file
+          initialHistory = messagesToHistoryItems(loadedMessages);
+          initialHistory.push({
+            kind: "info",
+            text: `↻ Restored session (${loadedMessages.length} messages)`,
+            id: `restore-info`,
+          });
+        }
+      } catch {
+        // Session file corrupt or missing — start fresh
+      }
+    }
+  }
+
+  // Create a new session file if we didn't reuse one
+  if (!sessionPath) {
+    const session = await sessionManager.create(cwd, provider, model);
+    sessionPath = session.path;
+  }
 
   await renderApp({
     provider,
@@ -193,6 +277,9 @@ async function runInkTUI(opts: {
     cwd,
     loggedInProviders,
     credentialsByProvider,
+    initialHistory,
+    sessionsDir: paths.sessionsDir,
+    sessionPath,
   });
 }
 
@@ -203,25 +290,38 @@ async function runLogin(): Promise<void> {
   const authStorage = new AuthStorage();
   await authStorage.load();
 
+  // Phase 1: Ink-based provider selector
+  const provider = await renderLoginSelector();
+  if (!provider) {
+    console.log(chalk.hex("#6b7280")("Login cancelled."));
+    return;
+  }
+
+  console.log(
+    chalk.hex("#60a5fa").bold("\nLogging in to ") +
+      chalk.hex("#a78bfa")(displayName(provider)) +
+      chalk.hex("#60a5fa").bold("...\n"),
+  );
+
+  // Phase 2: OAuth flow (readline needed for Anthropic code paste)
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 
   try {
-    // Interactive provider selection
-    const provider = await selectProvider(rl);
-
-    console.log(`\nLogging in to ${displayName(provider)}...\n`);
-
     const callbacks: OAuthLoginCallbacks = {
       onOpenUrl: (url) => {
-        console.log("Opening browser...");
+        console.log(chalk.hex("#60a5fa").bold("Opening browser..."));
         openBrowser(url);
-        console.log(`\nIf the browser didn't open, visit:\n${chalk.dim(url)}\n`);
+        console.log(
+          chalk.hex("#6b7280")("\nIf the browser didn't open, visit:\n") +
+            chalk.hex("#6b7280")(url) +
+            "\n",
+        );
       },
       onPromptCode: async (message) => {
         return rl.question(message + " ");
       },
       onStatus: (message) => {
-        console.log(chalk.dim(message));
+        console.log(chalk.hex("#6b7280")(message));
       },
     };
 
@@ -229,29 +329,9 @@ async function runLogin(): Promise<void> {
       provider === "anthropic" ? await loginAnthropic(callbacks) : await loginOpenAI(callbacks);
 
     await authStorage.setCredentials(provider, creds);
-    console.log(chalk.green(`\nLogged in to ${displayName(provider)} successfully!`));
+    console.log(chalk.hex("#4ade80")(`\n✓ Logged in to ${displayName(provider)} successfully!`));
   } finally {
     rl.close();
-  }
-}
-
-async function selectProvider(rl: readline.Interface): Promise<Provider> {
-  const providers: { key: string; label: string; value: Provider }[] = [
-    { key: "1", label: "Anthropic (Claude)", value: "anthropic" },
-    { key: "2", label: "OpenAI (ChatGPT)", value: "openai" },
-  ];
-
-  console.log("\nSelect a provider to log in:\n");
-  for (const p of providers) {
-    console.log(`  ${chalk.bold(p.key)}) ${p.label}`);
-  }
-  console.log();
-
-  while (true) {
-    const answer = (await rl.question("Choice (1-2): ")).trim();
-    const match = providers.find((p) => p.key === answer);
-    if (match) return match.value;
-    console.log("Invalid choice. Enter 1 or 2.");
   }
 }
 
@@ -278,6 +358,30 @@ function readStdinSync(): string {
 
 function displayName(provider: Provider): string {
   return provider === "anthropic" ? "Anthropic" : "OpenAI";
+}
+
+function extractText(content: string | Array<{ type: string; text?: string }>): string {
+  if (typeof content === "string") return content;
+  return content
+    .filter((b) => b.type === "text" && b.text)
+    .map((b) => b.text!)
+    .join("\n");
+}
+
+function messagesToHistoryItems(msgs: Message[]): CompletedItem[] {
+  const items: CompletedItem[] = [];
+  let id = 0;
+  for (const msg of msgs) {
+    if (msg.role === "user") {
+      const text = extractText(msg.content);
+      if (text) items.push({ kind: "user", text, id: `restore-${id++}` });
+    } else if (msg.role === "assistant") {
+      const text = extractText(msg.content);
+      if (text) items.push({ kind: "assistant", text, id: `restore-${id++}` });
+    }
+    // Skip tool result messages — they don't need visual display
+  }
+  return items;
 }
 
 function openBrowser(url: string): void {
