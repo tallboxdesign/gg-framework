@@ -306,7 +306,7 @@ export function ActivityIndicator({
   }, [phrases, phraseInterval]);
 
   const spinnerColor = PULSE_COLORS[colorFrame];
-  const phrase = phrases[phraseIndex];
+  const phrase = phrases[phraseIndex % phrases.length] ?? phrases[0];
   const ellipsis = ELLIPSIS_FRAMES[ellipsisFrame];
 
   // Shimmer animation — wraps across phrase text length

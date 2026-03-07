@@ -3,7 +3,7 @@ import { createInterface } from "node:readline";
 import { z } from "zod";
 import type { AgentTool } from "@kenkaiiii/gg-agent";
 import type { AgentDefinition } from "../core/agents.js";
-import { truncateHead } from "./truncate.js";
+import { truncateTail } from "./truncate.js";
 
 const SUB_AGENT_MAX_TURNS = 10;
 const SUB_AGENT_MAX_OUTPUT_CHARS = 100_000; // ~25k tokens, matches other tool limits
@@ -177,10 +177,10 @@ export function createSubAgentTool(
 
           // Truncate output to prevent blowing up parent's context
           const raw = textOutput || "(no output)";
-          const result = truncateHead(raw, SUB_AGENT_MAX_OUTPUT_LINES, SUB_AGENT_MAX_OUTPUT_CHARS);
+          const result = truncateTail(raw, SUB_AGENT_MAX_OUTPUT_LINES, SUB_AGENT_MAX_OUTPUT_CHARS);
           const content = result.truncated
-            ? result.content +
-              `\n\n[Sub-agent output truncated: ${result.totalLines} total lines, showing first ${result.keptLines}]`
+            ? `[Sub-agent output truncated: ${result.totalLines} total lines, showing last ${result.keptLines}]\n\n` +
+              result.content
             : result.content;
 
           resolve({ content, details });
