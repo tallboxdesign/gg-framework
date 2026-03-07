@@ -33,11 +33,21 @@ packages/
   └── gg-coding-agent/       # @kenkaiiii/ggcoder — CLI (ggcoder)
       └── src/
           ├── cli.ts         # CLI entry point
+          ├── config.ts      # Configuration constants
+          ├── session.ts     # Session management
+          ├── system-prompt.ts # System prompt generation
           ├── core/          # Auth, OAuth, settings, sessions, extensions
-          ├── tools/         # Agentic tools (bash, read, write, edit, grep, find)
+          │   ├── oauth/     # PKCE OAuth flows (anthropic, openai)
+          │   ├── compaction/ # Context compaction & token estimation
+          │   ├── mcp/       # Model Context Protocol client
+          │   └── extensions/ # Extension system
+          ├── tools/         # Agentic tools (bash, read, write, edit, grep, find, ls, web-fetch, subagent)
           ├── ui/            # Ink/React terminal UI components & hooks
-          ├── modes/         # Execution modes (interactive, print)
-          └── utils/         # Error handling, git, shell, formatting
+          │   ├── components/ # 25+ UI components (one per file)
+          │   ├── hooks/     # useAgentLoop, useSessionManager, useSlashCommands, etc.
+          │   └── theme/     # dark.json, light.json
+          ├── modes/         # Execution modes (interactive, print, json)
+          └── utils/         # Error handling, git, shell, formatting, image
 ```
 
 ## Package Dependencies
@@ -139,7 +149,7 @@ There are two kinds of slash commands:
 
 Commands that need direct access to React state (UI, overlays, token counters) are handled inline in `handleSubmit` in `src/ui/App.tsx`. These short-circuit before the slash command registry.
 
-**Current UI commands:** `/model` (`/m`), `/clear`
+**Current UI commands:** `/model` (`/m`), `/compact` (`/c`), `/quit` (`/q`, `/exit`), `/clear`
 
 To add a new UI command:
 1. Add a condition in `handleSubmit` after the existing checks:
@@ -156,7 +166,9 @@ To add a new UI command:
 
 Commands that don't need React state live in `createBuiltinCommands()` in `src/core/slash-commands.ts`. They receive a `SlashCommandContext` with methods like `switchModel`, `compact`, `newSession`, `quit`, etc.
 
-**Current registry commands:** `/help` (`/h`, `/?`), `/compact` (`/c`), `/settings` (`/config`), `/session` (`/s`), `/new` (`/n`), `/quit` (`/q`, `/exit`)
+**Current registry commands:** `/model` (`/m`), `/compact` (`/c`), `/help` (`/h`, `/?`), `/settings` (`/config`), `/session` (`/s`), `/new` (`/n`), `/quit` (`/q`, `/exit`)
+
+Note: `/model`, `/compact`, and `/quit` exist in both — the UI handlers in `App.tsx` take precedence since they're checked first.
 
 To add a new registry command:
 1. Add an entry to the array in `createBuiltinCommands()`:
@@ -182,3 +194,5 @@ To add a new registry command:
 | Reset token counters | `App.tsx` (call `agentLoop.reset()`) |
 | Access agent session (messages, auth, settings) | `slash-commands.ts` registry |
 | Both UI + session access | `App.tsx` (can call session methods via props) |
+
+There is also support for **prompt-template commands** (built-in from `core/prompt-commands.ts` and custom from `.gg/commands/` directory).
