@@ -1,7 +1,7 @@
 # ggcoder
 
 <p align="center">
-  <strong>An open-source CLI coding agent. No API keys. Just OAuth and go.</strong>
+  <strong>The fast, lean coding agent. Four providers. Zero bloat.</strong>
 </p>
 
 <p align="center">
@@ -11,70 +11,37 @@
   <a href="https://skool.com/kenkai"><img src="https://img.shields.io/badge/Skool-Community-7C3AED?style=for-the-badge" alt="Skool"></a>
 </p>
 
-**ggcoder** is a terminal-based coding agent that connects to Claude and GPT models through OAuth. No API keys to manage. Log in once, start coding. It reads your codebase, edits files, runs commands, and loops until the job is done.
+I built ggcoder because I got tired of waiting. Claude Code is a great product, but it carries an enormous system prompt that eats tokens and slows everything down. The Claude Agent SDK has the same problem — it's essentially Claude Code under the hood. Every turn starts with thousands of tokens of instructions the model mostly ignores.
 
-Built as a TypeScript monorepo with three composable packages that you can use independently or together.
-
----
-
-## Why this exists
-
-Most coding agents either lock you into one provider or make you juggle API keys across machines.
-
-ggcoder uses OAuth exclusively. Log in with your Anthropic or OpenAI account, and it handles token refresh, session management, and provider switching. Switch between Claude and GPT mid-conversation. No `.env` files, no key rotation, no billing surprises from leaked credentials.
-
-It's also fully open-source. Every layer of the stack is available as its own npm package if you want to build on top of it.
+So I stripped it all out. ggcoder's system prompt is ~90 lines of what actually matters. The result is a coding agent that responds noticeably faster, burns fewer tokens per turn, and gets out of your way.
 
 ---
 
-## What it actually does
+## Why this is different
 
-### Agentic coding loop
-Give it a task and it figures out the rest. It reads files, makes edits, runs shell commands, and validates its own work. Multi-turn tool execution with automatic error recovery. When a command fails, it reads the output and adjusts. When an edit breaks something, it catches it and fixes it.
+### It's actually fast
+The biggest bottleneck in coding agents isn't the model — it's how much context you shove into every request. Claude Code's system prompt alone is thousands of tokens. ggcoder cuts that down to the essentials. Less input = faster time-to-first-token, fewer wasted tokens, lower cost per turn.
 
-### OAuth-only authentication
-No API keys anywhere. PKCE OAuth flows for both Anthropic and OpenAI. Tokens stored securely in `~/.gg/auth.json` with automatic refresh. One `ggcoder login` and you're set.
+### Four providers, one interface
+Not just Anthropic. Not just OpenAI. ggcoder supports **Claude** (Opus, Sonnet, Haiku), **GPT** (GPT-4.1, o3, o4-mini), **GLM** (GLM-5, GLM-4.7), and **Kimi** (K2.5). Switch between them mid-conversation with `/model`. Same tools, same UI, different brain. Use whatever model fits the task.
 
-### Multi-provider support
-Switch between Claude (Sonnet, Opus, Haiku) and GPT (GPT-4.1, o3, o4-mini) with `/model`. Same conversation, different models. The unified streaming API handles provider differences so you don't have to think about them.
+### OAuth for Anthropic & OpenAI, API keys for GLM & Moonshot
+No `.env` files for Claude and GPT — log in with OAuth once and it handles token refresh automatically. GLM and Moonshot use straightforward API keys. Either way, you're coding in under 30 seconds.
 
-### Full tool suite
-- **File operations:** read, write, edit, glob, grep, ls
-- **Shell execution:** bash with timeout, background tasks
-- **Web fetching:** pull content from URLs
-- **Subagents:** spawn parallel agents for independent tasks
-- **MCP support:** connect external tool servers
-
-### Interactive terminal UI
-Built with Ink and React. Syntax-highlighted code blocks, streaming responses, session management, dark/light themes. Slash commands for everything: `/model`, `/compact`, `/session`, `/clear`, `/help`.
-
-### Session management
-Conversations persist across restarts. Resume where you left off or start fresh. Context compaction keeps long sessions within token limits without losing important context.
-
-### Extensible architecture
-Three npm packages, each usable on its own:
-
-| Package | Description |
-|---|---|
-| [`@kenkaiiii/gg-ai`](https://www.npmjs.com/package/@kenkaiiii/gg-ai) | Unified LLM streaming API for Anthropic and OpenAI |
-| [`@kenkaiiii/gg-agent`](https://www.npmjs.com/package/@kenkaiiii/gg-agent) | Agent loop with tool execution and multi-turn reasoning |
-| [`@kenkaiiii/ggcoder`](https://www.npmjs.com/package/@kenkaiiii/ggcoder) | The full CLI coding agent |
+### Open-source and composable
+The whole stack is three npm packages you can use independently. Want just the unified streaming API? Install `@kenkaiiii/gg-ai`. Need an agent loop for your own app? `@kenkaiiii/gg-agent`. Or use the full CLI. Everything is MIT licensed and available on npm.
 
 ---
 
 ## Getting started
 
-### Install
-
 ```bash
 npm i -g @kenkaiiii/ggcoder
 ```
 
-### Setup
-
 1. Run `ggcoder login`
-2. Pick your provider (Anthropic or OpenAI)
-3. Authenticate in your browser
+2. Pick your provider
+3. Authenticate
 4. Start coding with `ggcoder`
 
 That's it.
@@ -90,9 +57,13 @@ ggcoder
 # Ask a question directly
 ggcoder "fix the failing tests in src/utils"
 
+# Use a different provider
+ggcoder -p moonshot
+
 # Switch models mid-session
 /model claude-opus-4-6
 /model gpt-4.1
+/model kimi-k2.5
 
 # Manage sessions
 /session list
@@ -105,37 +76,50 @@ ggcoder "fix the failing tests in src/utils"
 
 ---
 
-## Using the packages independently
+## Supported models
 
-### @kenkaiiii/gg-ai — Unified LLM streaming
+| Provider | Models | Auth |
+|---|---|---|
+| **Anthropic** | Claude Opus 4.6, Sonnet 4.6, Haiku 4.5 | OAuth |
+| **OpenAI** | GPT-4.1, o3, o4-mini | OAuth |
+| **Z.AI (GLM)** | GLM-5, GLM-4.7 | API key |
+| **Moonshot** | Kimi K2.5 | API key |
+
+---
+
+## The packages
+
+The CLI is built on two standalone libraries. Use them separately if you want.
+
+| Package | What it does |
+|---|---|
+| [`@kenkaiiii/gg-ai`](https://www.npmjs.com/package/@kenkaiiii/gg-ai) | Unified streaming API across all four providers. One interface, provider differences handled internally. |
+| [`@kenkaiiii/gg-agent`](https://www.npmjs.com/package/@kenkaiiii/gg-agent) | Agent loop with multi-turn tool execution, Zod-validated parameters, error recovery. |
+| [`@kenkaiiii/ggcoder`](https://www.npmjs.com/package/@kenkaiiii/ggcoder) | Full CLI — tools, sessions, UI, OAuth, the works. |
+
+### Quick example — streaming API
 
 ```typescript
 import { stream } from "@kenkaiiii/gg-ai";
 
-const result = stream({
+for await (const event of stream({
   provider: "anthropic",
   model: "claude-sonnet-4-6",
   messages: [{ role: "user", content: "Hello!" }],
-});
-
-// Stream events
-for await (const event of result) {
+})) {
   if (event.type === "text_delta") process.stdout.write(event.text);
 }
-
-// Or just await the final result
-const response = await stream({ /* ... */ });
 ```
 
-### @kenkaiiii/gg-agent — Agent loop
+### Quick example — agent loop
 
 ```typescript
 import { Agent } from "@kenkaiiii/gg-agent";
 import { z } from "zod";
 
 const agent = new Agent({
-  provider: "anthropic",
-  model: "claude-sonnet-4-6",
+  provider: "moonshot",
+  model: "kimi-k2.5",
   system: "You are a helpful assistant.",
   tools: [{
     name: "get_weather",
@@ -148,7 +132,7 @@ const agent = new Agent({
 });
 
 for await (const event of agent.prompt("What's the weather in Tokyo?")) {
-  // Handle agent events: text_delta, tool_call_start, tool_call_end, etc.
+  // text_delta, tool_call_start, tool_call_end, agent_done, etc.
 }
 ```
 
@@ -181,7 +165,7 @@ MIT
 ---
 
 <p align="center">
-  <strong>A coding agent that authenticates like an app, not a script.</strong>
+  <strong>Less bloat. More coding. Four providers. One agent.</strong>
 </p>
 
 <p align="center">
