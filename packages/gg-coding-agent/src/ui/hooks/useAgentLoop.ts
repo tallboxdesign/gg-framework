@@ -342,7 +342,13 @@ export function useAgentLoop(
                 output: prev.output + event.usage.outputTokens,
               }));
               // Latest turn's input tokens = current context window fill
-              setContextUsed(event.usage.inputTokens);
+              // With prompt caching, input_tokens only counts non-cached tokens.
+              // Total context = input + cache_read + cache_write.
+              setContextUsed(
+                event.usage.inputTokens +
+                  (event.usage.cacheRead ?? 0) +
+                  (event.usage.cacheWrite ?? 0),
+              );
               // Replace char-based estimate with real output tokens
               realTokensAccumRef.current += event.usage.outputTokens;
               charCountRef.current = 0;
