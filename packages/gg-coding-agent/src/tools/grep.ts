@@ -84,27 +84,33 @@ async function searchFile(
   const results: string[] = [];
   const relPath = path.relative(cwd, filePath);
 
+  const stream = createReadStream(filePath, { encoding: "utf-8" });
   try {
     const rl = readline.createInterface({
-      input: createReadStream(filePath, { encoding: "utf-8" }),
+      input: stream,
       crlfDelay: Infinity,
     });
 
     let lineNum = 0;
-    for await (const line of rl) {
-      lineNum++;
-      // Reset lastIndex for global regex
-      regex.lastIndex = 0;
-      if (regex.test(line)) {
-        results.push(`${relPath}:${lineNum}:${line}`);
-        if (results.length >= maxResults) {
-          rl.close();
-          break;
+    try {
+      for await (const line of rl) {
+        lineNum++;
+        // Reset lastIndex for global regex
+        regex.lastIndex = 0;
+        if (regex.test(line)) {
+          results.push(`${relPath}:${lineNum}:${line}`);
+          if (results.length >= maxResults) {
+            break;
+          }
         }
       }
+    } finally {
+      rl.close();
     }
   } catch {
     // Skip unreadable files
+  } finally {
+    stream.destroy();
   }
 
   return results;

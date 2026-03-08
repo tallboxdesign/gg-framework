@@ -155,6 +155,18 @@ export type CompletedItem =
   | BannerItem
   | SubAgentGroupItem;
 
+/**
+ * Max history items kept in React state. Ink's <Static> renders items once
+ * to stdout, so pruned items remain visible in terminal scrollback — we just
+ * release the JS object references to avoid unbounded memory growth.
+ */
+const MAX_HISTORY_ITEMS = 500;
+
+function pruneHistory(items: CompletedItem[]): CompletedItem[] {
+  if (items.length <= MAX_HISTORY_ITEMS) return items;
+  return items.slice(items.length - MAX_HISTORY_ITEMS);
+}
+
 // ── Duration summary ─────────────────────────────────────
 
 function formatDuration(ms: number): string {
@@ -253,7 +265,7 @@ export function App(props: AppProps) {
   useEffect(() => {
     if (isRestoredSession && !restoredRef.current) {
       restoredRef.current = true;
-      setHistory((prev) => [...prev, ...props.initialHistory!]);
+      setHistory((prev) => pruneHistory([...prev, ...props.initialHistory!]));
     }
   }, [isRestoredSession, props.initialHistory]);
   // Items from the current/last turn — rendered in the live area so they stay visible
@@ -703,7 +715,7 @@ export function App(props: AppProps) {
     if (wasRunningRef.current && !agentLoop.isRunning) {
       setLiveItems((prev) => {
         if (prev.length > 0) {
-          setHistory((h) => [...h, ...prev]);
+          setHistory((h) => pruneHistory([...h, ...prev]));
         }
         return [];
       });
@@ -799,7 +811,7 @@ export function App(props: AppProps) {
           // Move live items into history before starting
           setLiveItems((prev) => {
             if (prev.length > 0) {
-              setHistory((h) => [...h, ...prev]);
+              setHistory((h) => pruneHistory([...h, ...prev]));
             }
             return [];
           });
@@ -842,7 +854,7 @@ export function App(props: AppProps) {
       // Move any remaining live items into history (Static) before starting new turn
       setLiveItems((prev) => {
         if (prev.length > 0) {
-          setHistory((h) => [...h, ...prev]);
+          setHistory((h) => pruneHistory([...h, ...prev]));
         }
         return [];
       });
