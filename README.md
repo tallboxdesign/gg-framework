@@ -67,86 +67,13 @@ You can still add your own MCPs if you need them. But start with less. You'll ge
 
 ---
 
-## Quick start
-
-### Streaming API
-
-```bash
-npm i @kenkaiiii/gg-ai
-```
-
-```typescript
-import { stream } from "@kenkaiiii/gg-ai";
-
-// Stream events
-for await (const event of stream({
-  provider: "anthropic",
-  model: "claude-sonnet-4-6",
-  apiKey: "sk-...",
-  messages: [{ role: "user", content: "Hello!" }],
-})) {
-  if (event.type === "text_delta") process.stdout.write(event.text);
-}
-
-// Or just await the final response
-const response = await stream({
-  provider: "openai",
-  model: "gpt-4.1",
-  apiKey: "sk-...",
-  messages: [{ role: "user", content: "Hello!" }],
-});
-```
-
-### Agent loop
-
-```bash
-npm i @kenkaiiii/gg-agent
-```
-
-```typescript
-import { Agent } from "@kenkaiiii/gg-agent";
-import { z } from "zod";
-
-const agent = new Agent({
-  provider: "moonshot",
-  model: "kimi-k2.5",
-  apiKey: "sk-...",
-  system: "You are a helpful assistant.",
-  tools: [{
-    name: "get_weather",
-    description: "Get the weather for a city",
-    parameters: z.object({ city: z.string() }),
-    async execute({ city }) {
-      return { temperature: 72, condition: "sunny" };
-    },
-  }],
-});
-
-for await (const event of agent.prompt("What's the weather in Tokyo?")) {
-  // text_delta, tool_call_start, tool_call_end, agent_done, etc.
-}
-```
-
-### CLI
+## Install
 
 ```bash
 npm i -g @kenkaiiii/ggcoder
-ggcoder login
-ggcoder
 ```
 
----
-
-## For developers
-
-```bash
-git clone https://github.com/KenKaiii/gg-framework.git
-cd gg-framework
-pnpm install
-pnpm build
-```
-
-TypeScript 5.9 + pnpm workspaces + Ink 6 + React 19 + Vitest 4 + Zod v4
+Each package can also be installed independently. See the individual READMEs for details.
 
 ---
 

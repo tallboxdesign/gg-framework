@@ -71,21 +71,7 @@ Everything runs through slash commands inside the session. Not CLI flags.
 
 ## Custom commands
 
-Drop a markdown file in `.gg/commands/` and it becomes a slash command.
-
-```markdown
----
-name: deploy
-description: Build, test, and deploy to production
----
-
-1. Run the test suite
-2. Build for production
-3. Deploy using the project's deploy script
-4. Verify the deployment is healthy
-```
-
-Now `/deploy` works in that project. Your React app gets `/deploy` and `/storybook`. Your API gets `/migrate` and `/seed`. Different projects, different commands.
+Drop a markdown file in `.gg/commands/` and it becomes a slash command. Your React app gets `/deploy` and `/storybook`. Your API gets `/migrate` and `/seed`. Different projects, different commands.
 
 ---
 

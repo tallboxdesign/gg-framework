@@ -23,123 +23,29 @@ npm i @kenkaiiii/gg-agent
 
 ---
 
-## Usage
+## How it works
 
-### Basic agent
+Create an `Agent` with a provider, model, and tools. Call `agent.prompt()` to start a conversation.
 
-```typescript
-import { Agent } from "@kenkaiiii/gg-agent";
-import { z } from "zod";
+- **`for await`** gives you streaming events (`text_delta`, `tool_call_start`, `tool_call_end`, `agent_done`, etc.)
+- **`await`** gives you the final result (`message`, `totalTurns`, `totalUsage`)
 
-const agent = new Agent({
-  provider: "anthropic",
-  model: "claude-sonnet-4-6",
-  apiKey: "sk-...",
-  system: "You are a helpful assistant.",
-  tools: [{
-    name: "get_weather",
-    description: "Get the weather for a city",
-    parameters: z.object({ city: z.string() }),
-    async execute({ city }) {
-      return `72°F and sunny in ${city}`;
-    },
-  }],
-});
+Same dual-nature pattern as `@kenkaiiii/gg-ai`. The `Agent` class maintains conversation history — each `prompt()` call continues the conversation.
 
-for await (const event of agent.prompt("What's the weather in Tokyo?")) {
-  switch (event.type) {
-    case "text_delta":
-      process.stdout.write(event.text);
-      break;
-    case "tool_call_start":
-      console.log(`\nCalling ${event.name}...`);
-      break;
-    case "tool_call_end":
-      console.log(`Done (${event.durationMs}ms)`);
-      break;
-    case "agent_done":
-      console.log(`\nFinished in ${event.totalTurns} turns`);
-      break;
-  }
-}
-```
+For full control, use `agentLoop()` directly — a pure async generator that takes a messages array and options.
 
-### Await the result
+### Tools
 
-```typescript
-const result = await agent.prompt("What's the weather in Tokyo?");
-
-console.log(result.message);    // AssistantMessage (final response)
-console.log(result.totalTurns); // number of LLM calls
-console.log(result.totalUsage); // aggregated token usage
-```
-
-Same `agent.prompt()` call. `for await` gives you events. `await` gives you the final result.
-
-### Multi-turn conversations
-
-The `Agent` class maintains conversation history. Each `prompt()` call continues the conversation.
-
-```typescript
-await agent.prompt("What's the weather in Tokyo?");
-await agent.prompt("How about New York?");
-await agent.prompt("Which one is warmer?");
-// Agent remembers all previous turns
-```
-
-### Using agentLoop directly
-
-For full control, use the pure async generator directly.
-
-```typescript
-import { agentLoop } from "@kenkaiiii/gg-agent";
-
-const messages = [
-  { role: "system" as const, content: "You are helpful." },
-  { role: "user" as const, content: "Hello!" },
-];
-
-const loop = agentLoop(messages, {
-  provider: "openai",
-  model: "gpt-4.1",
-  apiKey: "sk-...",
-  tools: [/* ... */],
-});
-
-for await (const event of loop) {
-  // Same events as agent.prompt()
-}
-// messages array is mutated with the full conversation
-```
-
----
-
-## Defining tools
-
-Tools use Zod schemas for parameters. The `execute` function receives typed args.
-
-```typescript
-import { z } from "zod";
-import type { AgentTool } from "@kenkaiiii/gg-agent";
-
-const readFile: AgentTool<typeof fileParams> = {
-  name: "read_file",
-  description: "Read the contents of a file",
-  parameters: fileParams,
-  async execute({ path }, context) {
-    // context.signal — AbortSignal
-    // context.toolCallId — unique ID for this call
-    // context.onUpdate — send progress updates
-    return fs.readFileSync(path, "utf-8");
-  },
-};
-
-const fileParams = z.object({
-  path: z.string().describe("Absolute file path"),
-});
-```
+Define tools with a name, description, Zod schema for parameters, and an `execute` function. The execute function receives typed args and a `ToolContext` with `signal`, `toolCallId`, and `onUpdate`.
 
 Return a string, or a `{ content, details }` object for structured results. If `execute` throws, the error becomes a tool result (not a crash). The agent sees the error and can retry or adjust.
+
+### Safety
+
+- `maxTurns` (default: 40) prevents runaway loops
+- `AbortSignal` support for cancellation
+- Zod validation on tool args
+- `maxContinuations` (default: 5) caps consecutive `pause_turn` continuations
 
 ---
 
@@ -162,26 +68,24 @@ Return a string, or a `{ content, details }` object for structured results. If `
 
 ## Options
 
-```typescript
-interface AgentOptions {
-  provider: "anthropic" | "openai" | "glm" | "moonshot";
-  model: string;
-  system?: string;
-  tools?: AgentTool[];
-  serverTools?: ServerToolDefinition[];
-  maxTurns?: number;       // default: 40
-  maxTokens?: number;
-  temperature?: number;
-  thinking?: "low" | "medium" | "high" | "max";
-  apiKey?: string;
-  baseUrl?: string;
-  signal?: AbortSignal;
-  cacheRetention?: "none" | "short" | "long";
-  compaction?: boolean;    // Anthropic only
-  maxContinuations?: number; // default: 5
-  transformContext?: (messages: Message[]) => Message[] | Promise<Message[]>;
-}
-```
+| Option | Type | Description |
+|---|---|---|
+| `provider` | `"anthropic" \| "openai" \| "glm" \| "moonshot"` | Required |
+| `model` | `string` | Required |
+| `system` | `string` | System prompt |
+| `tools` | `AgentTool[]` | Tools with Zod schemas and execute functions |
+| `serverTools` | `ServerToolDefinition[]` | Server-side tool definitions |
+| `maxTurns` | `number` | Max LLM calls (default: 40) |
+| `maxTokens` | `number` | Max output tokens per turn |
+| `temperature` | `number` | Sampling temperature |
+| `thinking` | `"low" \| "medium" \| "high" \| "max"` | Extended thinking |
+| `apiKey` | `string` | Provider API key |
+| `baseUrl` | `string` | Custom endpoint |
+| `signal` | `AbortSignal` | Cancellation |
+| `cacheRetention` | `"none" \| "short" \| "long"` | Prompt cache preference |
+| `compaction` | `boolean` | Server-side compaction (Anthropic only) |
+| `maxContinuations` | `number` | Max pause_turn continuations (default: 5) |
+| `transformContext` | `(messages) => messages` | Transform messages before each LLM call |
 
 `transformContext` is called before each LLM call. Use it for compaction, truncation, or injecting dynamic context.
 
