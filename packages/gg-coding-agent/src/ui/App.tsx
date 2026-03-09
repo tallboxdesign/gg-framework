@@ -1,7 +1,10 @@
 import React, { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { Box, Text, Static, useStdout } from "ink";
 import { useTerminalSize } from "./hooks/useTerminalSize.js";
-import crypto from "node:crypto";
+import crypto, { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import type {
   Message,
   Provider,
@@ -27,6 +30,7 @@ import { Footer } from "./components/Footer.js";
 import { Banner } from "./components/Banner.js";
 import { ShimmerLine } from "./components/ShimmerLine.js";
 import { ModelSelector } from "./components/ModelSelector.js";
+import { TaskOverlay } from "./components/TaskOverlay.js";
 import { BackgroundTasksBar } from "./components/BackgroundTasksBar.js";
 import type { SlashCommandInfo } from "./components/SlashCommandMenu.js";
 import type { ProcessManager, BackgroundProcess } from "../core/process-manager.js";
@@ -213,6 +217,22 @@ function pickDurationVerb(toolsUsed: string[]): string {
 
 const THINKING_BORDER_COLORS = ["#60a5fa", "#818cf8", "#a78bfa", "#818cf8", "#60a5fa"];
 
+// ── Task count helper ───────────────────────────────────────
+
+function getTaskCount(cwd: string): number {
+  try {
+    const hash = createHash("sha256").update(cwd).digest("hex").slice(0, 16);
+    const data = readFileSync(
+      join(homedir(), ".gg-tasks", "projects", hash, "tasks.json"),
+      "utf-8",
+    );
+    const tasks = JSON.parse(data) as { status: string }[];
+    return tasks.filter((t) => t.status !== "done").length;
+  } catch {
+    return 0;
+  }
+}
+
 // ── App Props ──────────────────────────────────────────────
 
 export interface AppProps {
@@ -270,7 +290,9 @@ export function App(props: AppProps) {
   }, [isRestoredSession, props.initialHistory]);
   // Items from the current/last turn — rendered in the live area so they stay visible
   const [liveItems, setLiveItems] = useState<CompletedItem[]>([]);
-  const [overlay, setOverlay] = useState<"model" | null>(null);
+  const [overlay, setOverlay] = useState<"model" | "tasks" | null>(null);
+  const [taskCount, setTaskCount] = useState(() => getTaskCount(props.cwd));
+  const [staticKey, setStaticKey] = useState(0);
   const [lastUserMessage, setLastUserMessage] = useState("");
   const [doneStatus, setDoneStatus] = useState<{
     durationMs: number;
@@ -287,6 +309,7 @@ export function App(props: AppProps) {
   const sessionManagerRef = useRef(
     props.sessionsDir ? new SessionManager(props.sessionsDir) : null,
   );
+  const sessionPathRef = useRef(props.sessionPath);
   const persistedIndexRef = useRef(messagesRef.current.length);
 
   const getId = () => String(nextIdRef.current++);
@@ -312,7 +335,7 @@ export function App(props: AppProps) {
 
   const persistNewMessages = useCallback(async () => {
     const sm = sessionManagerRef.current;
-    const sp = props.sessionPath;
+    const sp = sessionPathRef.current;
     if (!sm || !sp) return;
     const allMsgs = messagesRef.current;
     for (let i = persistedIndexRef.current; i < allMsgs.length; i++) {
@@ -328,7 +351,7 @@ export function App(props: AppProps) {
       await sm.appendEntry(sp, entry);
     }
     persistedIndexRef.current = allMsgs.length;
-  }, [props.sessionPath]);
+  }, []);
 
   // ── Compaction ─────────────────────────────────────────
 
@@ -993,6 +1016,7 @@ export function App(props: AppProps) {
             model={props.model}
             provider={props.provider}
             cwd={props.cwd}
+            taskCount={taskCount}
           />
         );
       case "user":
@@ -1074,117 +1098,145 @@ export function App(props: AppProps) {
     }
   };
 
+  const isTaskView = overlay === "tasks";
+
   return (
     <Box flexDirection="column">
-      {/* History — scrolled up, managed by Ink Static.
-          width="100%" is required because Static uses position:absolute internally,
-          which causes auto-width resolution to shrink-wrap content. Without it,
-          children using flexGrow+flexBasis=0 (like AssistantMessage) collapse to
-          near-zero width and text wraps at ~3 chars.
-
-          resizeKey forces a full remount after terminal resize settles (300ms
-          debounce). This is the only way to make Ink re-print <Static> items —
-          Ink tracks rendered items by key and won't re-render them otherwise,
-          so reflowed/corrupted scrollback content persists.  The useTerminalSize
-          hook clears screen+scrollback before bumping resizeKey, giving
-          Ink a clean slate to re-render into. */}
-      <Static key={resizeKey} items={history} style={{ width: "100%" }}>
+      {/* History — scrolled up, managed by Ink Static. */}
+      <Static
+        key={`${resizeKey}-${staticKey}`}
+        items={isTaskView ? [] : history}
+        style={{ width: "100%" }}
+      >
         {(item) => renderItem(item)}
       </Static>
 
       {/* Shimmer line — renders via raw ANSI to terminal row 1, bypassing Ink layout */}
       <ShimmerLine active={agentLoop.isRunning} />
 
-      {/* Content area — paddingRight prevents Yoga off-by-one blank lines
-          when text wraps at the exact terminal edge */}
-
-      <Box flexDirection="column" flexGrow={1} paddingRight={1}>
-        {/* Live items — current/last turn, stays visible */}
-        {liveItems.map((item) => renderItem(item))}
-
-        {/* Streaming area — thinking text + response text */}
-        <StreamingArea
-          isRunning={agentLoop.isRunning}
-          streamingText={agentLoop.streamingText}
-          streamingThinking={agentLoop.streamingThinking}
-          showThinking={props.showThinking}
-          thinkingMs={agentLoop.thinkingMs}
-        />
-      </Box>
-
-      {/* Pinned status line — activity indicator while running, duration summary when done */}
-      {agentLoop.isRunning && agentLoop.activityPhase !== "idle" ? (
-        <Box
-          marginTop={1}
-          borderStyle={agentLoop.activityPhase === "thinking" ? "round" : undefined}
-          borderColor={
-            agentLoop.activityPhase === "thinking"
-              ? THINKING_BORDER_COLORS[thinkingBorderFrame]
-              : undefined
-          }
-          paddingLeft={agentLoop.activityPhase === "thinking" ? 1 : 0}
-          paddingRight={agentLoop.activityPhase === "thinking" ? 1 : 0}
-        >
-          <ActivityIndicator
-            phase={agentLoop.activityPhase}
-            elapsedMs={agentLoop.elapsedMs}
-            thinkingMs={agentLoop.thinkingMs}
-            isThinking={agentLoop.isThinking}
-            tokenEstimate={agentLoop.streamedTokenEstimate}
-            userMessage={lastUserMessage}
-          />
-        </Box>
-      ) : (
-        doneStatus && (
-          <Box marginTop={1}>
-            <Text color={doneFlash ? theme.success : theme.textDim}>
-              {"✻ "}
-              {doneStatus.verb} {formatDuration(doneStatus.durationMs)}
-            </Text>
-          </Box>
-        )
-      )}
-
-      {/* Input + Footer/ModelSelector pinned at bottom */}
-      <InputArea
-        onSubmit={handleSubmit}
-        onAbort={handleAbort}
-        disabled={agentLoop.isRunning}
-        isActive={!taskBarFocused}
-        onDownAtEnd={handleFocusTaskBar}
-        onShiftTab={handleToggleThinking}
-        cwd={props.cwd}
-        commands={allCommands}
-      />
-      {overlay === "model" ? (
-        <ModelSelector
-          onSelect={handleModelSelect}
-          onCancel={() => setOverlay(null)}
-          loggedInProviders={props.loggedInProviders ?? [currentProvider]}
-          currentModel={currentModel}
-          currentProvider={currentProvider}
-        />
-      ) : (
-        <Footer
-          model={currentModel}
-          tokensIn={agentLoop.contextUsed}
+      {isTaskView ? (
+        <TaskOverlay
           cwd={props.cwd}
-          gitBranch={gitBranch}
-          thinkingEnabled={thinkingEnabled}
+          agentRunning={agentLoop.isRunning}
+          onClose={() => {
+            stdout?.write("\x1b[2J\x1b[3J\x1b[H");
+            setTaskCount(getTaskCount(props.cwd));
+            setStaticKey((k) => k + 1);
+            setOverlay(null);
+          }}
+          onWorkOnTask={(text) => {
+            setOverlay(null);
+            setTaskCount(getTaskCount(props.cwd));
+            // Reset to a fresh session before sending the task
+            stdout?.write("\x1b[2J\x1b[3J\x1b[H");
+            setHistory([{ kind: "banner", id: "banner" }]);
+            setLiveItems([]);
+            messagesRef.current = messagesRef.current.slice(0, 1);
+            agentLoop.reset();
+            persistedIndexRef.current = messagesRef.current.length;
+            const sm = sessionManagerRef.current;
+            if (sm) {
+              void sm.create(props.cwd, currentProvider, currentModel).then((s) => {
+                sessionPathRef.current = s.path;
+                log("INFO", "tasks", "New session for task", { path: s.path });
+              });
+            }
+            handleSubmit(text, []);
+          }}
         />
-      )}
-      {bgTasks.length > 0 && (
-        <BackgroundTasksBar
-          tasks={bgTasks}
-          focused={taskBarFocused}
-          expanded={taskBarExpanded}
-          selectedIndex={selectedTaskIndex}
-          onExpand={handleTaskBarExpand}
-          onCollapse={handleTaskBarCollapse}
-          onKill={handleTaskKill}
-          onExit={handleTaskBarExit}
-          onNavigate={handleTaskNavigate}
-        />
+      ) : (
+        <>
+          {/* Content area */}
+          <Box flexDirection="column" flexGrow={1} paddingRight={1}>
+            {liveItems.map((item) => renderItem(item))}
+            <StreamingArea
+              isRunning={agentLoop.isRunning}
+              streamingText={agentLoop.streamingText}
+              streamingThinking={agentLoop.streamingThinking}
+              showThinking={props.showThinking}
+              thinkingMs={agentLoop.thinkingMs}
+            />
+          </Box>
+
+          {/* Pinned status line */}
+          {agentLoop.isRunning && agentLoop.activityPhase !== "idle" ? (
+            <Box
+              marginTop={1}
+              borderStyle={agentLoop.activityPhase === "thinking" ? "round" : undefined}
+              borderColor={
+                agentLoop.activityPhase === "thinking"
+                  ? THINKING_BORDER_COLORS[thinkingBorderFrame]
+                  : undefined
+              }
+              paddingLeft={agentLoop.activityPhase === "thinking" ? 1 : 0}
+              paddingRight={agentLoop.activityPhase === "thinking" ? 1 : 0}
+            >
+              <ActivityIndicator
+                phase={agentLoop.activityPhase}
+                elapsedMs={agentLoop.elapsedMs}
+                thinkingMs={agentLoop.thinkingMs}
+                isThinking={agentLoop.isThinking}
+                tokenEstimate={agentLoop.streamedTokenEstimate}
+                userMessage={lastUserMessage}
+              />
+            </Box>
+          ) : (
+            doneStatus && (
+              <Box marginTop={1}>
+                <Text color={doneFlash ? theme.success : theme.textDim}>
+                  {"✻ "}
+                  {doneStatus.verb} {formatDuration(doneStatus.durationMs)}
+                </Text>
+              </Box>
+            )
+          )}
+
+          {/* Input + Footer */}
+          <InputArea
+            onSubmit={handleSubmit}
+            onAbort={handleAbort}
+            disabled={agentLoop.isRunning}
+            isActive={!taskBarFocused}
+            onDownAtEnd={handleFocusTaskBar}
+            onShiftTab={handleToggleThinking}
+            onToggleTasks={() => {
+              stdout?.write("\x1b[2J\x1b[3J\x1b[H");
+              setOverlay("tasks");
+            }}
+            cwd={props.cwd}
+            commands={allCommands}
+          />
+          {overlay === "model" ? (
+            <ModelSelector
+              onSelect={handleModelSelect}
+              onCancel={() => setOverlay(null)}
+              loggedInProviders={props.loggedInProviders ?? [currentProvider]}
+              currentModel={currentModel}
+              currentProvider={currentProvider}
+            />
+          ) : (
+            <Footer
+              model={currentModel}
+              tokensIn={agentLoop.contextUsed}
+              cwd={props.cwd}
+              gitBranch={gitBranch}
+              thinkingEnabled={thinkingEnabled}
+            />
+          )}
+          {bgTasks.length > 0 && (
+            <BackgroundTasksBar
+              tasks={bgTasks}
+              focused={taskBarFocused}
+              expanded={taskBarExpanded}
+              selectedIndex={selectedTaskIndex}
+              onExpand={handleTaskBarExpand}
+              onCollapse={handleTaskBarCollapse}
+              onKill={handleTaskKill}
+              onExit={handleTaskBarExit}
+              onNavigate={handleTaskNavigate}
+            />
+          )}
+        </>
       )}
     </Box>
   );

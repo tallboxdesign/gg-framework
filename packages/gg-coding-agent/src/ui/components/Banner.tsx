@@ -9,6 +9,7 @@ interface BannerProps {
   model: string;
   provider: Provider;
   cwd: string;
+  taskCount?: number;
 }
 
 const LOGO_LINES = [
@@ -35,7 +36,7 @@ const GRADIENT = [
 
 const GAP = "   ";
 
-export function Banner({ version, model, cwd }: BannerProps) {
+export function Banner({ version, model, cwd, taskCount }: BannerProps) {
   const theme = useTheme();
   const modelInfo = getModel(model);
   const modelName = modelInfo?.name ?? model;
@@ -74,8 +75,14 @@ export function Banner({ version, model, cwd }: BannerProps) {
           {displayPath}
           {"  "}
         </Text>
+        <Text color={theme.border}>Shift+`</Text>
+        <Text color={theme.textDim}> tasks</Text>
+        {taskCount !== undefined && taskCount > 0 && (
+          <Text color={theme.secondary}> ({taskCount})</Text>
+        )}
+        <Text color={theme.textDim}>{"  "}</Text>
         <Text color={theme.border}>Shift+Tab</Text>
-        <Text color={theme.textDim}> toggle thinking</Text>
+        <Text color={theme.textDim}> thinking</Text>
       </Box>
     </Box>
   );
