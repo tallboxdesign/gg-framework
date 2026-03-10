@@ -56,7 +56,7 @@ export async function buildSystemPrompt(cwd: string, skills?: Skill[]): Promise<
       `- **read**: Read file contents. Use offset/limit for large files.\n` +
       `- **edit**: Surgical changes to existing files. The old_text must uniquely match one location.\n` +
       `- **write**: Create new files or complete rewrites. Prefer edit for small changes.\n` +
-      `- **bash**: Run commands (tests, builds, git, installs). Check exit code and output for errors. Never run commands that require interactive confirmation (e.g. y/n prompts) — use force flags or non-interactive alternatives instead (e.g. \`rm -f\` not \`rm -i\`, \`yes |\` prefix, \`--yes\`/\`--force\` flags). Set \`run_in_background=true\` for long-running processes (dev servers, watchers, file watchers) — returns a process ID immediately.\n` +
+      `- **bash**: Run commands (tests, builds, git, installs). The shell already runs in the project working directory — don't \`cd\` into it redundantly. Use \`cd\` only when you need a different directory. Check exit code and output for errors. Never run commands that require interactive confirmation (e.g. y/n prompts) — use force flags or non-interactive alternatives instead (e.g. \`rm -f\` not \`rm -i\`, \`yes |\` prefix, \`--yes\`/\`--force\` flags). Set \`run_in_background=true\` for long-running processes (dev servers, watchers, file watchers) — returns a process ID immediately.\n` +
       `- **find**: Discover project structure before diving into code. Map out directories and files.\n` +
       `- **grep**: Find usages, definitions, and imports across the codebase. Use to understand how code connects.\n` +
       `- **ls**: Understand project layout at a glance. Good for orienting in unfamiliar directories.\n` +

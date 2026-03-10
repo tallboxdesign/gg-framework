@@ -4,7 +4,7 @@ import { useTheme } from "../theme/theme.js";
 import { Spinner } from "./Spinner.js";
 import { highlightCode, langFromPath } from "../utils/highlight.js";
 
-const MAX_OUTPUT_LINES = 8;
+const MAX_OUTPUT_LINES = 4;
 
 interface ToolRunningProps {
   status: "running";
@@ -48,7 +48,7 @@ export function ToolExecution(props: ToolExecutionProps) {
   const isDiff = name === "edit" && !isError && result.includes("---");
 
   const { label, detail } = getToolHeaderParts(name, args);
-  const body = isDiff ? buildDiffBody(result, args) : buildResultBody(name, result, isError, args);
+  const body = isDiff ? buildDiffBody(result, args) : buildResultBody(name, result, isError);
 
   const headerColor = isError ? theme.toolError : theme.toolName;
 
@@ -117,7 +117,8 @@ export function ToolExecution(props: ToolExecutionProps) {
           <Box>
             <Text color={theme.textDim}>
               {"   … +"}
-              {hiddenCount} lines
+              {hiddenCount}
+              {" lines (ctrl+o to expand)"}
             </Text>
           </Box>
         )}
@@ -363,12 +364,7 @@ function buildDiffBody(result: string, args?: Record<string, unknown>): BodyCont
   };
 }
 
-function buildResultBody(
-  name: string,
-  result: string,
-  isError: boolean,
-  args?: Record<string, unknown>,
-): BodyContent | null {
+function buildResultBody(name: string, result: string, isError: boolean): BodyContent | null {
   if (isError) {
     const lines = result.split("\n");
     const display = lines.slice(0, MAX_OUTPUT_LINES);
@@ -402,35 +398,8 @@ function buildResultBody(
     }
     case "read":
       return null;
-    case "write": {
-      const allLines = result.split("\n");
-      const summary = allLines[0]; // "Wrote 12 lines to random-info.md"
-      let contentLines = allLines.slice(1);
-      // Trim trailing empty line from content that ends with \n
-      if (contentLines.length > 0 && contentLines[contentLines.length - 1] === "") {
-        contentLines = contentLines.slice(0, -1);
-      }
-      if (contentLines.length === 0) return null;
-      // Highlight the full content, then split back into lines
-      const filePath = String(args?.file_path ?? "");
-      const lang = langFromPath(filePath);
-      const rawContent = contentLines.join("\n");
-      const highlighted = highlightCode(rawContent, lang);
-      const hlLines = highlighted.split("\n");
-      const displayLines = hlLines.slice(0, MAX_OUTPUT_LINES);
-      const padWidth = String(contentLines.length).length;
-      return {
-        lines: [
-          <Text key="summary" color="#9ca3af">
-            {summary}
-          </Text>,
-          ...displayLines.map((line, i) => (
-            <WrittenLine key={i + 1} lineNo={i + 1} content={line} padWidth={padWidth} />
-          )),
-        ],
-        totalLines: 1 + contentLines.length, // summary + all content lines
-      };
-    }
+    case "write":
+      return null;
     case "grep": {
       const lines = result.split("\n").filter((l) => l.length > 0);
       if (lines.length === 0 || result === "No matches found.") return null;
@@ -550,26 +519,6 @@ function DiffLine({ line, padWidth }: { line: NumberedDiffLine; padWidth: number
         {"  "}
       </Text>
       {line.content}
-    </Text>
-  );
-}
-
-// ── Written line component ─────────────────────────────────
-
-function WrittenLine({
-  lineNo,
-  content,
-  padWidth,
-}: {
-  lineNo: number;
-  content: string;
-  padWidth: number;
-}) {
-  const num = String(lineNo).padStart(padWidth, " ");
-  return (
-    <Text>
-      <Text color="#6b7280">{num} </Text>
-      {content}
     </Text>
   );
 }
