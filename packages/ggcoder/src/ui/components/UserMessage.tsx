@@ -7,18 +7,22 @@ export function UserMessage({ text, imageCount }: { text: string; imageCount?: n
 
   return (
     <Box marginTop={1} flexDirection="column">
-      <Text wrap="wrap">
-        <Text color={theme.inputPrompt}>{"❯ "}</Text>
-        <Text color={theme.textMuted}>{text}</Text>
-        {imageCount != null &&
-          imageCount > 0 &&
-          Array.from({ length: imageCount }, (_, i) => (
-            <Text key={i} color={theme.accent}>
-              {" "}
-              [Image #{i + 1}]
-            </Text>
-          ))}
-      </Text>
+      <Box paddingX={1} paddingY={0}>
+        <Text wrap="wrap" color="white" backgroundColor="gray">
+          <Text color={theme.inputPrompt} backgroundColor="gray">
+            {"❯ "}
+          </Text>
+          {text}
+          {imageCount != null &&
+            imageCount > 0 &&
+            Array.from({ length: imageCount }, (_, i) => (
+              <Text key={i} color={theme.accent} backgroundColor="gray">
+                {" "}
+                [Image #{i + 1}]
+              </Text>
+            ))}
+        </Text>
+      </Box>
     </Box>
   );
 }

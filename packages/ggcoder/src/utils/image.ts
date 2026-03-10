@@ -60,8 +60,26 @@ function resolvePath(filePath: string, cwd: string): string {
 }
 
 /**
+ * Check if a token looks like an intentional file path rather than a bare filename
+ * mentioned in conversation. Bare names like "claude.md" should not be auto-attached;
+ * only explicit paths like "./claude.md", "/tmp/file.md", "~/notes.md", etc.
+ */
+function looksLikePath(token: string): boolean {
+  const stripped = token.replace(/^['"]|['"]$/g, "");
+  return (
+    stripped.includes("/") ||
+    stripped.includes("\\") ||
+    stripped.startsWith("~") ||
+    stripped.startsWith("file://")
+  );
+}
+
+/**
  * Extract attachable file paths from input text by checking if tokens resolve
  * to existing files on disk. Returns verified paths and the remaining text.
+ *
+ * Only tokens that look like explicit paths (contain `/`, `~`, `\`, or `file://`)
+ * are considered. Bare filenames like "readme.md" are left as text.
  */
 export async function extractImagePaths(
   text: string,
@@ -70,22 +88,26 @@ export async function extractImagePaths(
   const imagePaths: string[] = [];
   const cleanParts: string[] = [];
 
-  // Try the entire input as a single path first
-  const wholePath = resolvePath(text, cwd);
-  if (isAttachablePath(wholePath) && (await fileExists(wholePath))) {
-    return { imagePaths: [wholePath], cleanText: "" };
+  // Try the entire input as a single path first (only if it looks like a path)
+  if (looksLikePath(text)) {
+    const wholePath = resolvePath(text, cwd);
+    if (isAttachablePath(wholePath) && (await fileExists(wholePath))) {
+      return { imagePaths: [wholePath], cleanText: "" };
+    }
   }
 
   // Split on unescaped whitespace (respect backslash-escaped spaces like "file\ name.png")
   const tokens = text.match(/(?:[^\s\\]|\\.)+/g) ?? [];
   for (const token of tokens) {
     if (!token) continue;
-    const resolved = resolvePath(token, cwd);
-    if (isAttachablePath(resolved) && (await fileExists(resolved))) {
-      imagePaths.push(resolved);
-    } else {
-      cleanParts.push(token);
+    if (looksLikePath(token)) {
+      const resolved = resolvePath(token, cwd);
+      if (isAttachablePath(resolved) && (await fileExists(resolved))) {
+        imagePaths.push(resolved);
+        continue;
+      }
     }
+    cleanParts.push(token);
   }
 
   return { imagePaths, cleanText: cleanParts.join(" ") };
