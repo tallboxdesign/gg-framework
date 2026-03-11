@@ -210,8 +210,13 @@ export async function* agentLoop(
     }
     consecutivePauses = 0;
 
-    // If not tool_use, we're done
-    if (response.stopReason !== "tool_use") {
+    // Extract tool calls — separate client-executed from provider built-in (e.g. Moonshot $web_search)
+    const allToolCalls = extractToolCalls(response.message.content);
+
+    // If no tool calls to execute, we're done.
+    // Check content (not just stopReason) because some providers (e.g. GLM)
+    // return finish_reason="stop" even when tool calls are present.
+    if (response.stopReason !== "tool_use" && allToolCalls.length === 0) {
       yield {
         type: "agent_done" as const,
         totalTurns: turn,
@@ -223,9 +228,6 @@ export async function* agentLoop(
         totalUsage: { ...totalUsage },
       };
     }
-
-    // Extract tool calls — separate client-executed from provider built-in (e.g. Moonshot $web_search)
-    const allToolCalls = extractToolCalls(response.message.content);
     const toolCalls: ToolCall[] = [];
     const toolResults: ToolResult[] = [];
 
