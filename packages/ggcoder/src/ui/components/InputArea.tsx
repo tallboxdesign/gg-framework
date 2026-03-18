@@ -1,8 +1,9 @@
 import React, { useState, useRef, useEffect, useMemo } from "react";
-import { Text, Box, useInput, useStdout, useStdin } from "ink";
+import { Text, Box, useInput, useStdin } from "ink";
 import type { EventEmitter } from "events";
 import { useTheme } from "../theme/theme.js";
 import { useAnimationTick, deriveFrame } from "./AnimationContext.js";
+import { useTerminalSize } from "../hooks/useTerminalSize.js";
 import type { ImageAttachment } from "../../utils/image.js";
 import { extractImagePaths, readImageFile, getClipboardImage } from "../../utils/image.js";
 import { SlashCommandMenu, filterCommands, type SlashCommandInfo } from "./SlashCommandMenu.js";
@@ -96,8 +97,7 @@ export function InputArea({
   const historyRef = useRef<string[]>([]);
   const historyIndexRef = useRef(-1);
   const lastEscRef = useRef(0);
-  const { stdout } = useStdout();
-  const columns = stdout?.columns ?? 80;
+  const { columns } = useTerminalSize();
   const [menuIndex, setMenuIndex] = useState(0);
   const [pasteText, setPasteText] = useState(""); // accumulated pasted content
   const [pasteOffset, setPasteOffset] = useState(0); // where in value the paste starts

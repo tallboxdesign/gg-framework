@@ -1,6 +1,7 @@
 import React from "react";
-import { Text, Box, useStdout } from "ink";
+import { Text, Box } from "ink";
 import { useTheme } from "../theme/theme.js";
+import { useTerminalSize } from "../hooks/useTerminalSize.js";
 import { getContextWindow } from "../../core/model-registry.js";
 
 interface FooterProps {
@@ -71,8 +72,7 @@ export function Footer({
   planMode,
 }: FooterProps) {
   const theme = useTheme();
-  const { stdout } = useStdout();
-  const columns = stdout?.columns ?? 80;
+  const { columns } = useTerminalSize();
 
   // Show only last 2 path segments (project folder + immediate parent)
   const parts = cwd.split("/").filter(Boolean);

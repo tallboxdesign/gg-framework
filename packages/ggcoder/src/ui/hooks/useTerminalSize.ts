@@ -29,10 +29,12 @@ export function TerminalSizeProvider({ children }: { children: React.ReactNode }
   const onResize = useCallback(() => {
     if (!stdout) return;
 
-    // Update dimensions immediately for responsive layout
-    setSize({ columns: stdout.columns ?? 80, rows: stdout.rows ?? 24 });
-
-    // Debounce the resizeKey bump — only fires after the user stops dragging
+    // Do NOT update dimensions immediately — doing so triggers React
+    // re-renders on every resize event (many per drag), but Ink's internal
+    // line-tracking still assumes the old width, so each re-render at the
+    // new width is positioned incorrectly, leaving ghost/duplicate copies
+    // of the input area in the terminal.  Instead, debounce everything so
+    // we update once after the user finishes dragging.
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
       // Clear visible screen + scrollback to remove deformed ghost renders
@@ -43,6 +45,7 @@ export function TerminalSizeProvider({ children }: { children: React.ReactNode }
           "\x1b[3J" + // clear scrollback buffer
           "\x1b[H", // cursor home
       );
+      setSize({ columns: stdout.columns ?? 80, rows: stdout.rows ?? 24 });
       setResizeKey((k) => k + 1);
     }, 300);
   }, [stdout]);
@@ -64,14 +67,14 @@ export function TerminalSizeProvider({ children }: { children: React.ReactNode }
 /**
  * Returns { columns, rows, resizeKey } from the nearest TerminalSizeProvider.
  *
- * `columns` and `rows` update immediately on every resize event so layout
- * stays responsive while the user drags.
+ * All values (`columns`, `rows`, `resizeKey`) update together after resize
+ * events settle (300ms debounce).  Updating dimensions immediately would
+ * trigger React re-renders on every resize event while Ink's internal
+ * line-tracking still assumes the old width, causing ghost/duplicate renders.
  *
- * `resizeKey` increments once after resize events settle (300ms debounce).
- * Use it as a React `key` on the root content wrapper to force a full
- * remount — this is the only reliable way to make Ink re-render <Static>
- * content that was already printed to scrollback and got corrupted by
- * terminal text reflow.
+ * `resizeKey` can be used as a React `key` to force a full remount — this
+ * is the only reliable way to make Ink re-render <Static> content that was
+ * already printed to scrollback and got corrupted by terminal text reflow.
  */
 export function useTerminalSize() {
   const ctx = useContext(TerminalSizeContext);
