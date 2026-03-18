@@ -68,19 +68,22 @@ export function Banner({ version, model, cwd, taskCount }: BannerProps) {
         <Text>{GAP}</Text>
         <Text color={theme.secondary}>{modelName}</Text>
         <Text color={theme.textDim}>{"  "}</Text>
+        <Text color={theme.textDim}>{displayPath}</Text>
+      </Box>
+      <Box>
+        <GradientText text={LOGO_LINES[2]} shift={shift} />
+        <Text>{GAP}</Text>
         <Text color={theme.primary}>Shift+`</Text>
         <Text color={theme.textDim}> tasks</Text>
         {taskCount !== undefined && taskCount > 0 && (
           <Text color={theme.secondary}> ({taskCount})</Text>
         )}
         <Text color={theme.textDim}>{"  "}</Text>
+        <Text color={theme.primary}>Shift+S</Text>
+        <Text color={theme.textDim}> skills</Text>
+        <Text color={theme.textDim}>{"  "}</Text>
         <Text color={theme.primary}>Shift+Tab</Text>
         <Text color={theme.textDim}> thinking</Text>
-      </Box>
-      <Box>
-        <GradientText text={LOGO_LINES[2]} shift={shift} />
-        <Text>{GAP}</Text>
-        <Text color={theme.textDim}>{displayPath}</Text>
       </Box>
     </Box>
   );

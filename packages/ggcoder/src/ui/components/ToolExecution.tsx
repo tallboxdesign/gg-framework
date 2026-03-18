@@ -253,6 +253,10 @@ function getToolHeaderParts(
       const trunc = task.length > 50 ? task.slice(0, 47) + "…" : task;
       return { label: displayName, detail: trunc };
     }
+    case "skill": {
+      const skillName = String(args.skill ?? "");
+      return { label: displayName, detail: skillName };
+    }
     case "web_fetch": {
       const url = String(args.url ?? "");
       const trunc = url.length > 60 ? url.slice(0, 57) + "…" : url;
@@ -306,6 +310,8 @@ function toolDisplayName(name: string): string {
       return "List";
     case "subagent":
       return "Agent";
+    case "skill":
+      return "Skill";
     case "web_fetch":
       return "Fetch";
     case "tasks":
@@ -337,6 +343,8 @@ function getInlineSummary(name: string, result: string, isError: boolean): strin
     }
     case "subagent":
       return "completed";
+    case "skill":
+      return result.startsWith("Error") ? result.split("\n")[0] : "loaded";
     case "web_fetch": {
       const lines = result.split("\n").filter((l) => l.length > 0);
       if (result.startsWith("Error")) return result.split("\n")[0];
@@ -532,6 +540,8 @@ function buildResultBody(
         totalLines: lines.length,
       };
     }
+    case "skill":
+      return null; // compact display with inline summary
     case "web_fetch": {
       if (result.startsWith("Error")) {
         return {

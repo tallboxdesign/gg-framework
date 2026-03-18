@@ -12,11 +12,14 @@ import { createWebFetchTool } from "./web-fetch.js";
 import { createTaskOutputTool } from "./task-output.js";
 import { createTaskStopTool } from "./task-stop.js";
 import { createTasksTool } from "./tasks.js";
+import { createSkillTool } from "./skill.js";
 import { localOperations, type ToolOperations } from "./operations.js";
 import type { AgentDefinition } from "../core/agents.js";
+import type { Skill } from "../core/skills.js";
 
 export interface CreateToolsOptions {
   agents?: AgentDefinition[];
+  skills?: Skill[];
   provider?: string;
   model?: string;
   /** Custom I/O operations for remote execution (SSH, Docker, etc.). Defaults to local filesystem. */
@@ -51,6 +54,10 @@ export function createTools(cwd: string, opts?: CreateToolsOptions): CreateTools
     tools.push(createSubAgentTool(cwd, opts.agents, opts.provider, opts.model));
   }
 
+  if (opts?.skills && opts.skills.length > 0) {
+    tools.push(createSkillTool(opts.skills));
+  }
+
   return { tools, processManager };
 }
 
@@ -65,5 +72,6 @@ export { createWebFetchTool } from "./web-fetch.js";
 export { createTaskOutputTool } from "./task-output.js";
 export { createTaskStopTool } from "./task-stop.js";
 export { createTasksTool } from "./tasks.js";
+export { createSkillTool } from "./skill.js";
 export { ProcessManager } from "../core/process-manager.js";
 export { localOperations, type ToolOperations } from "./operations.js";

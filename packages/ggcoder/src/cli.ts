@@ -49,6 +49,8 @@ import { setEstimatorModel } from "./core/compaction/token-estimator.js";
 import { getContextWindow } from "./core/model-registry.js";
 import { MCPClientManager, getMCPServers } from "./core/mcp/index.js";
 import { discoverAgents } from "./core/agents.js";
+import { discoverSkills } from "./core/skills.js";
+import path from "node:path";
 import { loginAnthropic } from "./core/oauth/anthropic.js";
 import { loginOpenAI } from "./core/oauth/openai.js";
 import type { OAuthCredentials, OAuthLoginCallbacks } from "./core/oauth/types.js";
@@ -281,15 +283,25 @@ async function runInkTUI(opts: {
     }
   }
 
-  // Discover agents and build tools
+  // Ensure project-local .gg directories exist
+  const localGGDir = path.join(cwd, ".gg");
+  await fs.promises.mkdir(path.join(localGGDir, "skills"), { recursive: true });
+  await fs.promises.mkdir(path.join(localGGDir, "commands"), { recursive: true });
+  await fs.promises.mkdir(path.join(localGGDir, "agents"), { recursive: true });
+
+  // Discover agents and skills
   const agents = await discoverAgents({
     globalAgentsDir: paths.agentsDir,
     projectDir: cwd,
   });
+  const skills = await discoverSkills({
+    globalSkillsDir: paths.skillsDir,
+    projectDir: cwd,
+  });
 
   // Build system prompt & tools (with sub-agent support)
-  const systemPrompt = await buildSystemPrompt(cwd);
-  const { tools, processManager } = createTools(cwd, { agents, provider, model });
+  const systemPrompt = await buildSystemPrompt(cwd, skills);
+  const { tools, processManager } = createTools(cwd, { agents, skills, provider, model });
 
   // Connect MCP servers
   const mcpManager = new MCPClientManager();

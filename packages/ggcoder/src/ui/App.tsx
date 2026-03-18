@@ -26,6 +26,7 @@ import { Footer } from "./components/Footer.js";
 import { Banner } from "./components/Banner.js";
 import { ModelSelector } from "./components/ModelSelector.js";
 import { TaskOverlay } from "./components/TaskOverlay.js";
+import { SkillsOverlay } from "./components/SkillsOverlay.js";
 import { BackgroundTasksBar } from "./components/BackgroundTasksBar.js";
 import type { SlashCommandInfo } from "./components/SlashCommandMenu.js";
 import type { ProcessManager, BackgroundProcess } from "../core/process-manager.js";
@@ -451,7 +452,7 @@ export function App(props: AppProps) {
   }, [isRestoredSession, props.initialHistory]);
   // Items from the current/last turn — rendered in the live area so they stay visible
   const [liveItems, setLiveItems] = useState<CompletedItem[]>([]);
-  const [overlay, setOverlay] = useState<"model" | "tasks" | null>(null);
+  const [overlay, setOverlay] = useState<"model" | "tasks" | "skills" | null>(null);
   const [taskCount, setTaskCount] = useState(() => getTaskCount(props.cwd));
   const [runAllTasks, setRunAllTasks] = useState(false);
   const runAllTasksRef = useRef(false);
@@ -1669,13 +1670,15 @@ export function App(props: AppProps) {
   }, [runAllTasks]);
 
   const isTaskView = overlay === "tasks";
+  const isSkillsView = overlay === "skills";
+  const isOverlayView = isTaskView || isSkillsView;
 
   return (
     <Box flexDirection="column">
       {/* History — scrolled up, managed by Ink Static. */}
       <Static
         key={`${resizeKey}-${staticKey}`}
-        items={isTaskView ? [] : history}
+        items={isOverlayView ? [] : history}
         style={{ width: "100%" }}
       >
         {(item) => (
@@ -1707,6 +1710,15 @@ export function App(props: AppProps) {
               markTaskInProgress(props.cwd, next.id);
               startTask(next.title, next.prompt, next.id);
             }
+          }}
+        />
+      ) : isSkillsView ? (
+        <SkillsOverlay
+          cwd={props.cwd}
+          onClose={() => {
+            stdout?.write("\x1b[2J\x1b[3J\x1b[H");
+            setStaticKey((k) => k + 1);
+            setOverlay(null);
           }}
         />
       ) : (
@@ -1780,6 +1792,10 @@ export function App(props: AppProps) {
             onToggleTasks={() => {
               stdout?.write("\x1b[2J\x1b[3J\x1b[H");
               setOverlay("tasks");
+            }}
+            onToggleSkills={() => {
+              stdout?.write("\x1b[2J\x1b[3J\x1b[H");
+              setOverlay("skills");
             }}
             cwd={props.cwd}
             commands={allCommands}

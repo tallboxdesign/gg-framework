@@ -71,6 +71,7 @@ export async function buildSystemPrompt(cwd: string, skills?: Skill[]): Promise<
       `  - **title**: Short label (~10 words max) shown in the task pane.\n` +
       `  - **prompt**: Standalone instruction sent to an agent with NO prior context. The agent must complete it from the prompt alone, so include specific file paths, what to change, and enough context to act without ambiguity. Be as long as needed for clarity, but no longer. If the task requires latest docs or APIs, tell the agent to research/fetch them.\n` +
       `  - **Ordering**: When creating multiple tasks (e.g. from a PRD or spec), add them in correct dependency order — foundational work first (types, schemas, config), then core logic, then integration, then UI, then tests. Each task should be completable independently given that prior tasks are done. Think like an engineer planning a project: what must exist before the next piece can be built?\n` +
+      `- **skill**: Invoke a skill by name to get specialized instructions for a task. Skills are defined in \`.gg/skills/\` as markdown files. Use this tool when a task matches an available skill.\n` +
       `- **mcp__grep__searchGitHub**: Search real-world code across 1M+ public GitHub repos. Use to verify your implementation against production patterns — check correct API usage, library idioms, and common conventions before finalizing changes. Search for literal code patterns (e.g. \`StreamableHTTPClientTransport(\`, \`useEffect(() =>\`), not keywords.`,
   );
 
