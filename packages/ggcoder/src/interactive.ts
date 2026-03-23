@@ -25,7 +25,7 @@ import { discoverSkills } from "./core/skills.js";
 import path from "node:path";
 import fs from "node:fs/promises";
 import { shouldCompact, compact } from "./core/compaction/compactor.js";
-import { getContextWindow } from "./core/model-registry.js";
+import { getContextWindow, getModel } from "./core/model-registry.js";
 
 export async function runInteractive(config: CliConfig): Promise<void> {
   const { provider, model, cwd } = config;
@@ -148,7 +148,7 @@ export async function runInteractive(config: CliConfig): Promise<void> {
         provider,
         model,
         tools,
-        maxTokens: 16384,
+        maxTokens: getModel(model)?.maxOutputTokens ?? 16384,
         apiKey: creds.accessToken,
         baseUrl: config.baseUrl,
         signal: ac.signal,

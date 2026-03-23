@@ -19,9 +19,8 @@ const MODEL_SHORT_NAMES: Record<string, string> = {
   "claude-sonnet-4-6": "Sonnet",
   "claude-haiku-4-5": "Haiku",
   "claude-haiku-4-5-20251001": "Haiku",
-  "gpt-4.1": "GPT-4.1",
-  "gpt-4.1-mini": "GPT-4.1 Mini",
-  "gpt-4.1-nano": "GPT-4.1 Nano",
+  "gpt-5.4": "GPT-5.4",
+  "gpt-5.4-mini": "GPT-5.4 Mini",
   o3: "o3",
   "o4-mini": "o4-mini",
 };

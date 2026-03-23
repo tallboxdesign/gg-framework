@@ -43,23 +43,23 @@ export const MODELS: ModelInfo[] = [
     supportsImages: true,
     costTier: "low",
   },
-  // ── OpenAI (Codex) ─────────────────────────────────────
+  // ── OpenAI ─────────────────────────────────────────────
   {
-    id: "gpt-5.3-codex",
-    name: "GPT-5.3 Codex",
+    id: "gpt-5.4",
+    name: "GPT-5.4",
     provider: "openai",
-    contextWindow: 400_000,
+    contextWindow: 1_050_000,
     maxOutputTokens: 128_000,
     supportsThinking: true,
     supportsImages: true,
     costTier: "high",
   },
   {
-    id: "gpt-5.1-codex-mini",
-    name: "GPT-5.1 Codex Mini",
+    id: "gpt-5.4-mini",
+    name: "GPT-5.4 Mini",
     provider: "openai",
-    contextWindow: 200_000,
-    maxOutputTokens: 100_000,
+    contextWindow: 272_000,
+    maxOutputTokens: 128_000,
     supportsThinking: true,
     supportsImages: true,
     costTier: "low",
@@ -117,7 +117,7 @@ export function getModelsForProvider(provider: Provider): ModelInfo[] {
 }
 
 export function getDefaultModel(provider: Provider): ModelInfo {
-  if (provider === "openai") return MODELS.find((m) => m.id === "gpt-5.3-codex")!;
+  if (provider === "openai") return MODELS.find((m) => m.id === "gpt-5.4")!;
   if (provider === "glm") return MODELS.find((m) => m.id === "glm-5")!;
   if (provider === "moonshot") return MODELS.find((m) => m.id === "kimi-k2.5")!;
   return MODELS.find((m) => m.id === "claude-sonnet-4-6")!;

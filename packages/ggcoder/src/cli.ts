@@ -46,7 +46,7 @@ import { buildSystemPrompt } from "./system-prompt.js";
 import { createTools } from "./tools/index.js";
 import { shouldCompact, compact } from "./core/compaction/compactor.js";
 import { setEstimatorModel } from "./core/compaction/token-estimator.js";
-import { getContextWindow } from "./core/model-registry.js";
+import { getContextWindow, getModel } from "./core/model-registry.js";
 import { MCPClientManager, getMCPServers } from "./core/mcp/index.js";
 import { discoverAgents } from "./core/agents.js";
 import { discoverSkills } from "./core/skills.js";
@@ -144,7 +144,7 @@ function printHelp(): void {
     ["-h, --help", "Show this help message"],
     ["-v, --version", "Show version number"],
     ["--provider <name>", "AI provider (anthropic, openai)"],
-    ["--model <name>", "Model to use (e.g. claude-sonnet-4-6, gpt-4.1)"],
+    ["--model <name>", "Model to use (e.g. claude-sonnet-4-6, gpt-5.4)"],
     ["--max-turns <n>", "Maximum agent turns per prompt"],
     ["--system-prompt <text>", "Override the system prompt"],
     ["--json", "JSON output mode (for sub-agents)"],
@@ -344,7 +344,7 @@ function main(): void {
   const provider: "anthropic" | "openai" | "glm" | "moonshot" = savedProvider ?? "anthropic";
 
   function getHardcodedDefault(p: string): string {
-    if (p === "openai") return "gpt-5.3-codex";
+    if (p === "openai") return "gpt-5.4";
     if (p === "glm") return "glm-5";
     if (p === "moonshot") return "kimi-k2.5";
     return "claude-opus-4-6";
@@ -553,7 +553,7 @@ async function runInkTUI(opts: {
     webSearch: true,
     messages,
     version: CLI_VERSION,
-    maxTokens: 16384,
+    maxTokens: getModel(model)?.maxOutputTokens ?? 16384,
     thinking: opts.thinkingLevel,
     apiKey: creds.accessToken,
     accountId: creds.accountId,
@@ -701,7 +701,7 @@ async function runSessions(): Promise<void> {
   const provider: "anthropic" | "openai" | "glm" | "moonshot" = savedProvider ?? "anthropic";
 
   function getDefault(p: string): string {
-    if (p === "openai") return "gpt-5.3-codex";
+    if (p === "openai") return "gpt-5.4";
     if (p === "glm") return "glm-5";
     if (p === "moonshot") return "kimi-k2.5";
     return "claude-opus-4-6";
@@ -954,7 +954,7 @@ async function runServe(): Promise<void> {
     (serveValues.provider as Provider | undefined) ?? savedProvider ?? "anthropic";
 
   function getDefault(p: string): string {
-    if (p === "openai") return "gpt-5.3-codex";
+    if (p === "openai") return "gpt-5.4";
     if (p === "glm") return "glm-5";
     if (p === "moonshot") return "kimi-k2.5";
     return "claude-opus-4-6";
